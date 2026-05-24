@@ -1,15 +1,14 @@
-#!/usr/bin/env node
-import { createServer } from "http";
-import { randomUUID } from "crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
 const API_URL = "https://cms-connect.base44.app/functions/cmsApiGateway";
-const PORT = process.env.PORT ?? 3000;
+
+const NO_KEY_MSG =
+  "No API key configured. Add ?api_key=cms_your_key to your MCP server URL.";
 
 async function callApi(apiKey, endpoint, payload = {}) {
   const body = { endpoint, ...(Object.keys(payload).length ? { payload } : {}) };
@@ -27,9 +26,6 @@ async function callApi(apiKey, endpoint, payload = {}) {
   }
   return res.json();
 }
-
-const NO_KEY_MSG =
-  "No API key configured. Add ?api_key=cms_your_key to your MCP server URL.";
 
 function createMcpServer(apiKey) {
   const server = new Server(
@@ -142,10 +138,9 @@ function createMcpServer(apiKey) {
           result = await callApi(apiKey, "payments", payload);
           break;
         }
-        case "get_payment_stats": {
+        case "get_payment_stats":
           result = await callApi(apiKey, "paymentStats", { FamilyId: args.FamilyId ?? null });
           break;
-        }
         case "search_families": {
           const payload = { search: args.search };
           if (args.pageSize !== undefined) payload.pageSize = args.pageSize;
@@ -172,55 +167,18 @@ function createMcpServer(apiKey) {
   return server;
 }
 
-// sessionId -> StreamableHTTPServerTransport
-const sessions = new Map();
-// sessionId -> apiKey string (may be null)
-const apiKeys = new Map();
-
-const httpServer = createServer(async (req, res) => {
-  try {
-    const url = new URL(req.url, `http://localhost`);
-    const sessionId = req.headers["mcp-session-id"];
-
-    if (sessionId) {
-      const transport = sessions.get(sessionId);
-      if (!transport) {
-        res.writeHead(404, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Session not found" }));
-        return;
-      }
-      await transport.handleRequest(req, res);
-      return;
-    }
-
-    // New session — read the api_key from query params
+export default {
+  async fetch(request) {
+    const url = new URL(request.url);
     const apiKey = url.searchParams.get("api_key") || null;
-    const newSessionId = randomUUID();
 
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => newSessionId,
-      onsessioninitialized: (id) => {
-        sessions.set(id, transport);
-        apiKeys.set(id, apiKey);
-      },
-      onsessionclosed: (id) => {
-        sessions.delete(id);
-        apiKeys.delete(id);
-      },
+    // Each request gets a fresh transport (required for stateless mode).
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
     });
 
-    const mcpServer = createMcpServer(apiKey);
-    await mcpServer.connect(transport);
-    await transport.handleRequest(req, res);
-  } catch (err) {
-    console.error("Request error:", err);
-    if (!res.headersSent) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Internal server error" }));
-    }
-  }
-});
-
-httpServer.listen(PORT, () => {
-  console.log(`CMS MCP server listening on port ${PORT}`);
-});
+    const server = createMcpServer(apiKey);
+    await server.connect(transport);
+    return transport.handleRequest(request);
+  },
+};
