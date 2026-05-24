@@ -1,0 +1,16 @@
+{
+  "name": "cmsmcpserver",
+  "version": "1.0.0",
+  "description": "MCP server for ChabadMS API",
+  "type": "module",
+  "bin": {
+    "cmsmcpserver": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}
