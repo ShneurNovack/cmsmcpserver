@@ -1,6 +1,6 @@
 # ChabadMS MCP Server
 
-MCP server exposing the ChabadMS API so any MCP-compatible AI client (Claude Desktop, etc.) can query your congregation data.
+Remote MCP server exposing the ChabadMS API. Runs as a shared HTTP server; each user supplies their own API key in the connection URL.
 
 ## Tools
 
@@ -15,56 +15,44 @@ MCP server exposing the ChabadMS API so any MCP-compatible AI client (Claude Des
 | `search_families` | Search families by name, returns FamilyId |
 | `get_contacts` | Paginated list of all contacts/members |
 
-## Setup
-
-### 1. Install dependencies
+## Running the Server
 
 ```bash
 npm install
+PORT=3000 node src/index.js
 ```
 
-### 2. Set your API key
+The server listens on `PORT` (default `3000`).
 
-```bash
-export CMS_API_KEY=cms_your_key_here
-```
+## Connecting (Per-User API Key)
 
-### 3. Run the server
+Each user adds `?api_key=cms_their_key` to the server URL when configuring their MCP client. This is how each user's key stays isolated on a shared server.
 
-```bash
-npm start
-```
-
-## Claude Desktop Configuration
-
-Add to your `claude_desktop_config.json`:
+### Claude Desktop (`claude_desktop_config.json`)
 
 ```json
 {
   "mcpServers": {
-    "cmsmcpserver": {
-      "command": "node",
-      "args": ["/absolute/path/to/cmsmcpserver/src/index.js"],
-      "env": {
-        "CMS_API_KEY": "cms_your_key_here"
-      }
+    "chabadms": {
+      "type": "http",
+      "url": "https://yourserver.com/mcp?api_key=cms_your_key_here"
     }
   }
 }
 ```
 
-Or if installed globally via npm:
+### Claude.ai (remote MCP)
 
-```json
-{
-  "mcpServers": {
-    "cmsmcpserver": {
-      "command": "npx",
-      "args": ["cmsmcpserver"],
-      "env": {
-        "CMS_API_KEY": "cms_your_key_here"
-      }
-    }
-  }
-}
+In Claude.ai settings → Integrations → Add MCP Server, enter:
+
 ```
+https://yourserver.com/mcp?api_key=cms_your_key_here
+```
+
+Each user enters their own key — they each get a separate session with their own data access.
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Port the HTTP server listens on |
